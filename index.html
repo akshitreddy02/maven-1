@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Collaborative Notepad</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        #notepad {
+            width: 100%;
+            height: 200px;
+            margin-bottom: 10px;
+        }
+        .note {
+            border: 1px solid #ddd;
+            padding: 10px;
+            margin: 10px 0;
+            background-color: #f9f9f9;
+            position: relative;
+        }
+        .note-content {
+            display: inline;
+        }
+        .read-more {
+            color: blue;
+            cursor: pointer;
+            text-decoration: underline;
+            position: absolute;
+            top: 10px;
+            right: 10px;
+        }
+        .copy-btn {
+            position: absolute;
+            top: 10px;
+            right: 100px;
+            background-color: #7d8691;
+            color: white;
+            border: none;
+            padding: 5px 10px;
+            cursor: pointer;
+            border-radius: 3px;
+            font-size: 0.8em;
+        }
+        .copy-btn:hover {
+            background-color: #aeb1b3;
+        }
+        .timestamp {
+            color: #666;
+            font-size: 0.8em;
+            margin-top: 10px;
+        }
+        #active-users {
+            margin-top: 20px;
+            padding: 10px;
+            background-color: #f0f0f0;
+            border-radius: 5px;
+        }
+        .user-info {
+            color: #444;
+            margin: 5px 0;
+        }
+    </style>
+</head>
+<body>
+    <h1>Collaborative Notepad</h1>
+    <div id="active-users">
+        <h3>Active Users</h3>
+        <div id="users-list"></div>
+    </div>
+    <textarea id="notepad" placeholder="Write your note here..."></textarea>
+    <button onclick="saveNote()">Save Note</button>
+    <div id="notes-container"></div>
+
+    <script>
+        const userId = "{{ user_id }}";
+        const expandedNotes = new Set();
+
+        function saveNote() {
+            const content = document.getElementById('notepad').value;
+            if (content.trim()) {
+                fetch('/api/notes', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ content: content }),
+                })
+                .then(response => response.json())
+                .then(() => {
+                    document.getElementById('notepad').value = '';
+                    loadNotes();
+                });
+            }
+        }
+
+        function loadNotes() {
+            fetch('/api/notes')
+                .then(response => response.json())
+                .then(notes => {
+                    const container = document.getElementById('notes-container');
+                    container.innerHTML = '';
+                    notes.reverse().forEach(note => {
+                        const noteElement = document.createElement('div');
+                        noteElement.className = 'note';
+
+                        const isExpanded = expandedNotes.has(note.id);
+                        const content = document.createElement('div');
+                        content.className = 'note-content';
+                        const fullText = note.content.replace(/\n/g, '<br>');
+                        const shortText = fullText.length > 100 ? fullText.slice(0, 100) + '...' : fullText;
+
+                        content.innerHTML = isExpanded || fullText.length <= 100 ? fullText : shortText;
+
+                        if (fullText.length > 100) {
+                            const readMore = document.createElement('span');
+                            readMore.className = 'read-more';
+                            readMore.textContent = isExpanded ? 'Show less' : 'Read more';
+                            readMore.addEventListener('click', () => {
+                                if (expandedNotes.has(note.id)) {
+                                    expandedNotes.delete(note.id);
+                                    content.innerHTML = shortText;
+                                    readMore.textContent = 'Read more';
+                                } else {
+                                    expandedNotes.add(note.id);
+                                    content.innerHTML = fullText;
+                                    readMore.textContent = 'Show less';
+                                }
+                            });
+                            noteElement.appendChild(readMore);
+                        }
+
+                        const copyButton = document.createElement('button');
+                        copyButton.className = 'copy-btn';
+                        copyButton.textContent = 'Copy';
+                        copyButton.addEventListener('click', () => {
+                            navigator.clipboard.writeText(note.content).then(() => {
+                                copyButton.textContent = 'Copied';
+                                setTimeout(() => {
+                                    copyButton.textContent = 'Copy';
+                                }, 3000);
+                            }).catch(err => {
+                                console.error('Failed to copy text: ', err);
+                            });
+                        });
+
+                        const timestamp = document.createElement('div');
+                        timestamp.className = 'timestamp';
+                        timestamp.textContent = `Posted by ${note.user_id} (${note.ip}) at ${note.timestamp}`;
+
+                        noteElement.appendChild(content);
+                        noteElement.appendChild(copyButton);
+                        noteElement.appendChild(timestamp);
+
+                        container.appendChild(noteElement);
+                    });
+                });
+        }
+
+        function updateActiveUsers() {
+            fetch('/api/active-users')
+                .then(response => response.json())
+                .then(users => {
+                    const usersList = document.getElementById('users-list');
+                    usersList.innerHTML = '';
+                    users.forEach(([userId, data]) => {
+                        const userElement = document.createElement('div');
+                        userElement.className = 'user-info';
+                        userElement.textContent = `${userId} (${data.ip})`;
+                        usersList.appendChild(userElement);
+                    });
+                });
+        }
+
+        loadNotes();
+        updateActiveUsers();
+        setInterval(updateActiveUsers, 5000);
+    </script>
+</body>
+</html>
+
+ 
